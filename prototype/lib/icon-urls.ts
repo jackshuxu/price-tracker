@@ -1,0 +1,20 @@
+// Shared icon URL map — used by both FloatingIcons and BasketPhysics
+export const ICON_URLS: Record<string, string> = {
+  'apples':       '/icons/apple_1.png',
+  'ground-beef':  '/icons/beef_1.png',
+  'bread':        '/icons/bread_1.png',
+  'butter':       '/icons/butter_1.png',
+  'chicken':      '/icons/chicken2_1.png',
+  'coffee':       '/icons/coffee_1.png',
+  'diesel':       '/icons/diesel_1.png',
+  'eggs':         '/icons/eggs_2.png',
+  'electricity':  '/icons/elec_1.png',
+  'gasoline':     '/icons/oil_2.png',
+  'milk':         '/icons/milk_2.png',
+  'natural-gas':  '/icons/gas_1.png',
+  'orange-juice': '/icons/OJ_1.png',
+  'potatoes':     '/icons/potato2_1.png',
+  'rice':         '/icons/rice_1.png',
+  'tomatoes':     '/icons/tomato_2.png',
+  'flour':        '/icons/wheat_1.png',
+}
