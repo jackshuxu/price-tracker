@@ -27,6 +27,10 @@
  * @property {Reducer} [combiner]
  * @property {Function} [partition]
  * @property {number} [rounds]
+ * @property {object} [constants]
+ * @property {string} [outputGid]
+ * @property {number} [batchSize]
+ * @property {number} [shuffleConcurrency]
  *
  * @typedef {Object} Mr
  * @property {(configuration: MRConfig, callback: Callback) => void} exec
@@ -49,6 +53,10 @@ function mr(config) {
     const mrService = {
       mapper: configuration.map,
       reducer: configuration.reduce,
+      constants: configuration.constants || {},
+      outputGid: typeof configuration.outputGid === 'string' ? configuration.outputGid : null,
+      batchSize: Math.max(0, Number(configuration.batchSize || 0)),
+      shuffleConcurrency: Math.max(1, Number(configuration.shuffleConcurrency || 64)),
 
       map: function (sourceGid, serviceId, callback) {
         const self = this;
@@ -65,7 +73,7 @@ function mr(config) {
                 { key: localKeys[i], gid: sourceGid }, function (e, value) {
                   if (!e && value !== undefined) {
                     try {
-                      let r = self.mapper(localKeys[i], value);
+                      let r = self.mapper(localKeys[i], value, self.constants);
                       if (!Array.isArray(r)) r = [r];
                       for (let j = 0; j < r.length; j++) {
                         intermediate.push(r[j]);
@@ -88,12 +96,46 @@ function mr(config) {
         const intermediate = self._mapOut || [];
         if (intermediate.length === 0) return callback(null, null);
 
+        function runWithLimit(items, limit, worker, done) {
+          if (!items || items.length === 0) {
+            done();
+            return;
+          }
+
+          const safeLimit = Math.max(1, Number(limit) || 1);
+          let cursor = 0;
+          let inFlight = 0;
+          let completed = 0;
+
+          function launch() {
+            while (inFlight < safeLimit && cursor < items.length) {
+              const item = items[cursor++];
+              inFlight += 1;
+              worker(item, function () {
+                inFlight -= 1;
+                completed += 1;
+                if (completed === items.length) {
+                  done();
+                } else {
+                  launch();
+                }
+              });
+            }
+          }
+
+          launch();
+        }
+
         const grouped = {};
         for (let m = 0; m < intermediate.length; m++) {
           const ks = Object.keys(intermediate[m]);
           for (let k = 0; k < ks.length; k++) {
-            if (!grouped[ks[k]]) grouped[ks[k]] = [];
-            grouped[ks[k]].push(intermediate[m][ks[k]]);
+            const rawKey = ks[k];
+            const encodedKey = typeof rawKey === 'string' ?
+              `s:${rawKey}` :
+              `j:${globalThis.distribution.util.serialize(rawKey)}`;
+            if (!grouped[encodedKey]) grouped[encodedKey] = [];
+            grouped[encodedKey].push(intermediate[m][rawKey]);
           }
         }
 
@@ -101,8 +143,10 @@ function mr(config) {
           const combineKeys = Object.keys(grouped);
           for (let c = 0; c < combineKeys.length; c++) {
             try {
-              const combined = self.combiner(combineKeys[c], grouped[combineKeys[c]]);
-              const cval = combined[combineKeys[c]];
+              const combined = self.combiner(combineKeys[c], grouped[combineKeys[c]], self.constants);
+              const cval = combined && typeof combined === 'object' &&
+                Object.prototype.hasOwnProperty.call(combined, combineKeys[c]) ?
+                combined[combineKeys[c]] : combined;
               if (cval !== undefined) {
                 grouped[combineKeys[c]] = [cval];
               }
@@ -138,42 +182,167 @@ function mr(config) {
 
             if (ops.length === 0) return callback(null, null);
 
-            let done = 0;
-            for (let i = 0; i < ops.length; i++) {
-              globalThis.distribution.local.comm.send(
-                [ops[i].val, { key: ops[i].key, gid: reduceGid }],
-                { node: ops[i].node, service: 'store', method: 'append' },
-                function () {
-                  done++;
-                  if (done === ops.length) callback(null, null);
-                });
+            const shuffleConcurrency = Math.max(1, Number(self.shuffleConcurrency || 64));
+            const batchSize = Math.max(0, Number(self.batchSize || 0));
+
+            if (batchSize > 1) {
+              const byNode = {};
+              for (let i = 0; i < ops.length; i++) {
+                const nodeId = nid.getNID(ops[i].node);
+                if (!byNode[nodeId]) {
+                  byNode[nodeId] = { node: ops[i].node, entries: [] };
+                }
+                byNode[nodeId].entries.push({ key: ops[i].key, value: ops[i].val });
+              }
+
+              const batchTasks = [];
+              const buckets = Object.values(byNode);
+              for (let i = 0; i < buckets.length; i++) {
+                const entries = buckets[i].entries;
+                for (let j = 0; j < entries.length; j += batchSize) {
+                  batchTasks.push({
+                    node: buckets[i].node,
+                    entries: entries.slice(j, j + batchSize),
+                  });
+                }
+              }
+
+              runWithLimit(batchTasks, shuffleConcurrency, function (task, nextTask) {
+                globalThis.distribution.local.comm.send(
+                  [task.entries, { gid: reduceGid }],
+                  { node: task.node, service: 'store', method: 'batchAppend' },
+                  function (batchErr) {
+                    if (!batchErr) {
+                      nextTask();
+                      return;
+                    }
+
+                    // Fall back to append when a remote node does not expose batchAppend.
+                    runWithLimit(task.entries, 16, function (entry, nextEntry) {
+                      globalThis.distribution.local.comm.send(
+                        [entry.value, { key: entry.key, gid: reduceGid }],
+                        { node: task.node, service: 'store', method: 'append' },
+                        function () {
+                          nextEntry();
+                        },
+                      );
+                    }, function () {
+                      nextTask();
+                    });
+                  },
+                );
+              }, function () {
+                callback(null, null);
+              });
+              return;
             }
+
+            const appendTasks = ops.map((op) => ({ node: op.node, key: op.key, value: op.val }));
+            runWithLimit(appendTasks, shuffleConcurrency, function (task, nextTask) {
+              globalThis.distribution.local.comm.send(
+                [task.value, { key: task.key, gid: reduceGid }],
+                { node: task.node, service: 'store', method: 'append' },
+                function () {
+                  nextTask();
+                },
+              );
+            }, function () {
+              callback(null, null);
+            });
           });
       },
 
       reduce: function (sourceGid, serviceId, callback) {
         const self = this;
         const reduceGid = serviceId + '_reduce';
+        const outputGid = self.outputGid;
         globalThis.distribution.local.store.get(
           { key: null, gid: reduceGid }, function (e, localKeys) {
             if (e || !localKeys || !Array.isArray(localKeys) ||
               localKeys.length === 0) {
+              if (outputGid) {
+                return callback(null, { gid: outputGid, written: 0, reducedKeys: 0 });
+              }
               return callback(null, []);
             }
+
             const results = [];
+            let written = 0;
+            let reducedKeys = 0;
             let cnt = 0;
+
+            function finishOne() {
+              cnt++;
+              if (cnt === localKeys.length) {
+                if (outputGid) {
+                  callback(null, { gid: outputGid, written, reducedKeys });
+                } else {
+                  callback(null, results);
+                }
+              }
+            }
+
             for (let i = 0; i < localKeys.length; i++) {
               const key = localKeys[i];
               globalThis.distribution.local.store.get(
                 { key: key, gid: reduceGid }, function (e, values) {
-                  if (!e && values) {
-                    try {
-                      results.push(self.reducer(key, values));
-                    } catch (err) { }
+                  if (e || !values) {
+                    finishOne();
+                    return;
                   }
-                  cnt++;
-                  if (cnt === localKeys.length) {
-                    callback(null, results);
+
+                  let reduced;
+                  try {
+                    let reduceKey = key;
+                    if (typeof key === 'string' && key.startsWith('s:')) {
+                      reduceKey = key.slice(2);
+                    } else if (typeof key === 'string' && key.startsWith('j:')) {
+                      try {
+                        reduceKey = globalThis.distribution.util.deserialize(key.slice(2));
+                      } catch (err) {
+                        reduceKey = key;
+                      }
+                    }
+                    reduced = self.reducer(reduceKey, values, self.constants);
+                  } catch (err) {
+                    finishOne();
+                    return;
+                  }
+
+                  reducedKeys += 1;
+
+                  if (!outputGid) {
+                    results.push(reduced);
+                    finishOne();
+                    return;
+                  }
+
+                  if (!reduced || typeof reduced !== 'object') {
+                    finishOne();
+                    return;
+                  }
+
+                  const entries = Object.entries(reduced);
+                  if (entries.length === 0) {
+                    finishOne();
+                    return;
+                  }
+
+                  let pendingWrites = entries.length;
+                  for (let j = 0; j < entries.length; j++) {
+                    const outKey = String(entries[j][0]);
+                    const outValue = entries[j][1];
+                    globalThis.distribution.local.store.put(
+                      outValue,
+                      { key: outKey, gid: outputGid },
+                      function () {
+                        written += 1;
+                        pendingWrites -= 1;
+                        if (pendingWrites === 0) {
+                          finishOne();
+                        }
+                      },
+                    );
                   }
                 });
             }
@@ -220,14 +389,33 @@ function mr(config) {
                 [gid, mrGid],
                 { service: mrGid, method: 'reduce' },
                 function (errors, reduceValues) {
-                  let allResults = [];
-                  if (reduceValues) {
+                  let finalResult = [];
+                  if (configuration.outputGid) {
+                    const summary = {
+                      gid: configuration.outputGid,
+                      written: 0,
+                      reducedKeys: 0,
+                      nodes: 0,
+                    };
+                    if (reduceValues) {
+                      const nodeIds = Object.keys(reduceValues);
+                      summary.nodes = nodeIds.length;
+                      for (let i = 0; i < nodeIds.length; i++) {
+                        const nodeResult = reduceValues[nodeIds[i]];
+                        if (nodeResult && typeof nodeResult === 'object') {
+                          summary.written += Number(nodeResult.written) || 0;
+                          summary.reducedKeys += Number(nodeResult.reducedKeys) || 0;
+                        }
+                      }
+                    }
+                    finalResult = summary;
+                  } else if (reduceValues) {
                     const nodeIds = Object.keys(reduceValues);
                     for (let i = 0; i < nodeIds.length; i++) {
                       const nr = reduceValues[nodeIds[i]];
                       if (Array.isArray(nr)) {
                         for (let j = 0; j < nr.length; j++) {
-                          allResults.push(nr[j]);
+                          finalResult.push(nr[j]);
                         }
                       }
                     }
@@ -238,7 +426,7 @@ function mr(config) {
                     function (ce, cv) {
                       globalThis.distribution[gid].routes.rem(
                         mrGid, function (e, v) {
-                          callback(null, allResults);
+                          callback(null, finalResult);
                         });
                     });
                 });
@@ -264,7 +452,7 @@ function mr(config) {
         return callback(null, prevResults);
       }
 
-      if (currentRound > 1 && prevResults && prevResults.length > 0) {
+      if (currentRound > 1 && Array.isArray(prevResults) && prevResults.length > 0) {
         let stored = 0;
         for (let i = 0; i < prevResults.length; i++) {
           const keys = Object.keys(prevResults[i]);

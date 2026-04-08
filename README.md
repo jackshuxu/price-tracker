@@ -1,5 +1,11 @@
 # Price Tracker Migration Plan
 
+## Documentation Index
+
+- API-SPEC.md: consumer-facing HTTP APIs, CLI contracts, and Stage 1 data schemas
+- distribution/README.md: distribution runtime internals and service contracts
+- in-pregress.md: current progress, shipped fixes, and follow-up items
+
 ## Architecture Diagrams
 
 ### Current Architecture
