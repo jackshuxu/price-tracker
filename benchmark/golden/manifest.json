@@ -1,0 +1,38 @@
+{
+  "corpusId": "m6-golden-price-v1",
+  "description": "Two synthetic product pages for M0 and distributed parity checks. One crawled URL = one document; store is both data-store-code and visible text for future store-filter queries.",
+  "pages": [
+    {
+      "path": "tj/index.html",
+      "seed": true,
+      "title": "Organic Almond Butter 8oz",
+      "storeCode": "TRADERJ01",
+      "sku": "TJALM001",
+      "priceText": "4.99 USD"
+    },
+    {
+      "path": "wf/index.html",
+      "seed": false,
+      "title": "Almond Butter Organic Small Batch",
+      "storeCode": "WHOLEF02",
+      "sku": "WFALM002",
+      "priceText": "6.49 USD"
+    }
+  ],
+  "m0Expected": {
+    "visitedCount": 2,
+    "queries": [
+      {
+        "args": ["almond"],
+        "expectBothUrls": true,
+        "note": "Single-term query 'almond' stems to almond; both pages indexed."
+      },
+      {
+        "args": ["trader"],
+        "urlMustContain": "tj/index.html",
+        "urlMustNotContain": "wf/index.html",
+        "note": "Store wording on Trader Joe page only; validates text distinguishes retailers."
+      }
+    ]
+  }
+}
