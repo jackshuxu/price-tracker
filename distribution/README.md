@@ -230,6 +230,11 @@ Spawn contract:
 - starts node
 - converges group membership by broadcasting updated map
 
+Spawn reliability notes:
+- `spawn` uses a single-callback guard to avoid duplicate completion.
+- `spawn` reports early non-zero child exit as failure.
+- `spawn` timeout is controlled by `DISTRIBUTION_SPAWN_TIMEOUT_MS` (default 10000).
+
 ## 8.5 all.gossip
 
 Methods:
@@ -260,6 +265,12 @@ Method:
 - exec(configuration, callback)
 
 MRConfig:
+
+Lookup behavior:
+- Remote-first lookup through group communication.
+- Local fallback only when remote lookup fails and local route exists.
+- Short-lived cache for route maps, controlled by `DISTRIBUTION_ROUTES_CACHE_MS` (default 1000).
+- Cache is invalidated on successful `put` and `rem`.
 - map: required
 - reduce: required
 - keys: optional
@@ -267,6 +278,7 @@ MRConfig:
 - partition: optional
 - rounds: optional
 - constants: optional
+- strict: optional
 - outputGid: optional
 - batchSize: optional
 - shuffleConcurrency: optional
@@ -290,6 +302,11 @@ Return modes:
     - written
     - reducedKeys
     - nodes
+    - errors (optional aggregated stage errors)
+
+Strict-mode behavior:
+- When `strict=true`, stage-level mapper/combiner/reducer failures propagate as fatal MR errors.
+- When `strict=false`, MR attempts best-effort completion and records sampled stage errors in summaries when available.
 
 ## 9. Serialization and Function Constraints
 
@@ -321,6 +338,8 @@ Key contracts:
 - Use bounded concurrency for fanout work at scale.
 - Prefer outputGid mode for large MR outputs to avoid coordinator OOM.
 - For large unique-cardinality metrics, use MR summaries (for example reducedKeys) instead of coordinator Set aggregation.
+- Keep `DISTRIBUTION_SPAWN_TIMEOUT_MS` explicit in environments with slow process startup.
+- Use MR strict mode for correctness-critical jobs and smoke validation.
 
 ## 12. Document Ownership and Sync Rules
 

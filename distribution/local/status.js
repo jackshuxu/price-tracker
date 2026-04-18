@@ -44,12 +44,28 @@ function spawn(configuration, callback) {
   const createRPC = globalThis.distribution.util.wire.createRPC;
   const path = require('path');
 
+  let finished = false;
+  let timeoutId = null;
+  const timeoutRaw = Number(process.env.DISTRIBUTION_SPAWN_TIMEOUT_MS || 10000);
+  const timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : 10000;
+
+  const finish = (e, v) => {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    callback(e, v);
+  };
+
   // Wrap callback to add spawned node to 'all' group first
   const wrappedCb = (e, v) => {
     if (!e) {
       globalThis.distribution.local.groups.add('all', { ip: configuration.ip, port: configuration.port });
     }
-    callback(e, v);
+    finish(e, v);
   };
 
   const rpcCb = createRPC(wrappedCb);
@@ -86,8 +102,19 @@ function spawn(configuration, callback) {
     { detached: true, stdio: 'ignore' },
   );
   child.on('error', (err) => {
-    callback(new Error('Failed to spawn: ' + err.message), null);
+    finish(new Error('Failed to spawn: ' + err.message), null);
   });
+
+  child.on('exit', (code) => {
+    if (!finished && code !== null && code !== 0) {
+      finish(new Error(`Spawned process exited early with code ${code}`), null);
+    }
+  });
+
+  timeoutId = setTimeout(() => {
+    finish(new Error(`Spawn timed out after ${timeoutMs}ms for ${configuration.ip}:${configuration.port}`), null);
+  }, timeoutMs);
+
   child.unref();
 }
 

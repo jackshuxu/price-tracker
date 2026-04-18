@@ -14,6 +14,42 @@ const path = require('path');
 const id = require('../util/id.js');
 const { serialize, deserialize } = require('../util/serialization.js');
 
+const writeQueues = new Map();
+
+function safeDeserialize(data, filePath) {
+  try {
+    return deserialize(data);
+  } catch (error) {
+    const wrapped = new Error(`Corrupt store record at ${filePath}: ${error.message}`);
+    wrapped.cause = error;
+    throw wrapped;
+  }
+}
+
+function atomicWriteFileSync(filePath, data) {
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  fs.writeFileSync(tempPath, data, 'utf8');
+  fs.renameSync(tempPath, filePath);
+}
+
+function queueFileMutation(filePath, mutation, callback) {
+  const previous = writeQueues.get(filePath) || Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(() => Promise.resolve().then(mutation));
+
+  writeQueues.set(filePath, current);
+
+  current
+    .then((result) => callback(null, result))
+    .catch((error) => callback(error))
+    .finally(() => {
+      if (writeQueues.get(filePath) === current) {
+        writeQueues.delete(filePath);
+      }
+    });
+}
+
 function getPath(gid, key) {
   const nid = globalThis.distribution.node.config.nid || id.getNID(globalThis.distribution.node.config);
   const safeKey = key === null ? 'null' : Buffer.from(key).toString('hex');
@@ -50,10 +86,10 @@ function put(state, configuration, callback) {
   }
 
   const p = getPath(gid, key);
-  fs.writeFile(p, serialize(state), (err) => {
-    if (err) return callback(err);
-    callback(null, state);
-  });
+  queueFileMutation(p, () => {
+    atomicWriteFileSync(p, serialize(state));
+    return state;
+  }, callback);
 }
 
 /**
@@ -79,7 +115,11 @@ function get(configuration, callback) {
   const p = getPath(gid, key);
   fs.readFile(p, 'utf8', (err, data) => {
     if (err) return callback(new Error('Key not found'));
-    callback(null, deserialize(data));
+    try {
+      callback(null, safeDeserialize(data, p));
+    } catch (parseError) {
+      callback(parseError);
+    }
   });
 }
 
@@ -91,13 +131,16 @@ function del(configuration, callback) {
   let { key, gid } = helper(configuration);
 
   const p = getPath(gid, key);
-  fs.readFile(p, 'utf8', (err, data) => {
-    if (err) return callback(new Error('Key not found'));
-    fs.unlink(p, (err2) => {
-      if (err2) return callback(err2);
-      callback(null, deserialize(data));
-    });
-  });
+  queueFileMutation(p, () => {
+    if (!fs.existsSync(p)) {
+      throw new Error('Key not found');
+    }
+
+    const data = fs.readFileSync(p, 'utf8');
+    const decoded = safeDeserialize(data, p);
+    fs.unlinkSync(p);
+    return decoded;
+  }, callback);
 }
 
 /**
@@ -113,21 +156,19 @@ function append(state, configuration, callback) {
   }
 
   const p = getPath(gid, key);
-  try {
+  queueFileMutation(p, () => {
     let arr = [];
     if (fs.existsSync(p)) {
       const data = fs.readFileSync(p, 'utf8');
-      const existing = deserialize(data);
+      const existing = safeDeserialize(data, p);
       if (Array.isArray(existing)) {
         arr = existing;
       }
     }
     arr.push(state);
-    fs.writeFileSync(p, serialize(arr));
-    callback(null, arr);
-  } catch (err) {
-    callback(err);
-  }
+    atomicWriteFileSync(p, serialize(arr));
+    return arr;
+  }, callback);
 }
 
 /**
@@ -143,44 +184,54 @@ function batchAppend(entries, configuration, callback) {
     return;
   }
 
-  try {
-    const grouped = new Map();
+  const grouped = new Map();
 
-    for (const entry of entries) {
-      if (!entry || typeof entry.key !== 'string') {
-        continue;
-      }
-      if (!grouped.has(entry.key)) {
-        grouped.set(entry.key, []);
-      }
-      grouped.get(entry.key).push(entry.value);
+  for (const entry of entries) {
+    if (!entry || typeof entry.key !== 'string') {
+      continue;
     }
-
-    let appended = 0;
-    for (const [key, values] of grouped.entries()) {
-      const p = getPath(gid, key);
-      let arr = [];
-      if (fs.existsSync(p)) {
-        const data = fs.readFileSync(p, 'utf8');
-        const existing = deserialize(data);
-        if (Array.isArray(existing)) {
-          arr = existing;
-        } else if (existing !== undefined) {
-          arr = [existing];
-        }
-      }
-
-      for (const value of values) {
-        arr.push(value);
-        appended += 1;
-      }
-      fs.writeFileSync(p, serialize(arr));
+    if (!grouped.has(entry.key)) {
+      grouped.set(entry.key, []);
     }
-
-    callback(null, { keys: grouped.size, appended });
-  } catch (err) {
-    callback(err);
+    grouped.get(entry.key).push(entry.value);
   }
+
+  let appended = 0;
+  const tasks = [];
+  for (const [key, values] of grouped.entries()) {
+    const p = getPath(gid, key);
+    tasks.push(new Promise((resolve, reject) => {
+      queueFileMutation(p, () => {
+        let arr = [];
+        if (fs.existsSync(p)) {
+          const data = fs.readFileSync(p, 'utf8');
+          const existing = safeDeserialize(data, p);
+          if (Array.isArray(existing)) {
+            arr = existing;
+          } else if (existing !== undefined) {
+            arr = [existing];
+          }
+        }
+
+        for (const value of values) {
+          arr.push(value);
+          appended += 1;
+        }
+        atomicWriteFileSync(p, serialize(arr));
+        return null;
+      }, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    }));
+  }
+
+  Promise.all(tasks)
+    .then(() => callback(null, { keys: grouped.size, appended }))
+    .catch((error) => callback(error));
 }
 
 module.exports = { put, get, del, append, batchAppend };

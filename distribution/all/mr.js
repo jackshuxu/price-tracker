@@ -28,6 +28,7 @@
  * @property {Function} [partition]
  * @property {number} [rounds]
  * @property {object} [constants]
+ * @property {boolean} [strict]
  * @property {string} [outputGid]
  * @property {number} [batchSize]
  * @property {number} [shuffleConcurrency]
@@ -50,13 +51,82 @@ function mr(config) {
     const mrID = id.getID(`${configuration}${Date.now()}`);
     const mrGid = `mr${mrID}`;
 
+    function toError(err) {
+      if (err instanceof Error) {
+        return err;
+      }
+      return new Error(String(err));
+    }
+
+    function normalizeStageError(stage, errors) {
+      if (!errors) {
+        return null;
+      }
+      if (errors instanceof Error) {
+        return errors;
+      }
+      if (typeof errors === 'object') {
+        const keys = Object.keys(errors);
+        if (keys.length === 0) {
+          return null;
+        }
+        const first = errors[keys[0]];
+        const firstErr = first instanceof Error ? first : new Error(String(first));
+        return new Error(`mr ${stage} failed on ${keys.join(', ')}: ${firstErr.message}`);
+      }
+      return new Error(`mr ${stage} failed: ${String(errors)}`);
+    }
+
+    function cleanupAndReturn(error, result) {
+      globalThis.distribution[gid].comm.send(
+        [mrGid],
+        { service: mrGid, method: 'cleanup' },
+        function () {
+          globalThis.distribution[gid].routes.rem(
+            mrGid,
+            function () {
+              callback(error, result);
+            },
+          );
+        },
+      );
+    }
+
     const mrService = {
       mapper: configuration.map,
       reducer: configuration.reduce,
       constants: configuration.constants || {},
+      strict: Boolean(configuration.strict),
       outputGid: typeof configuration.outputGid === 'string' ? configuration.outputGid : null,
       batchSize: Math.max(0, Number(configuration.batchSize || 0)),
       shuffleConcurrency: Math.max(1, Number(configuration.shuffleConcurrency || 64)),
+      _fatalError: null,
+      _errorSummary: {
+        map: { count: 0, samples: [] },
+        combine: { count: 0, samples: [] },
+        reduce: { count: 0, samples: [] },
+      },
+      _recordError: function (stage, err, context) {
+        const bucket = this._errorSummary[stage];
+        const normalized = toError(err);
+        const message = context ? `${context}: ${normalized.message}` : normalized.message;
+
+        bucket.count += 1;
+        if (bucket.samples.length < 5) {
+          bucket.samples.push(message);
+        }
+        if (bucket.count <= 3) {
+          console.error(`[mr.${stage}] ${message}`);
+        }
+        if (this.strict && !this._fatalError) {
+          this._fatalError = new Error(`mr.${stage} ${message}`);
+        }
+      },
+      _hasErrors: function () {
+        return this._errorSummary.map.count > 0 ||
+          this._errorSummary.combine.count > 0 ||
+          this._errorSummary.reduce.count > 0;
+      },
 
       map: function (sourceGid, serviceId, callback) {
         const self = this;
@@ -78,11 +148,17 @@ function mr(config) {
                       for (let j = 0; j < r.length; j++) {
                         intermediate.push(r[j]);
                       }
-                    } catch (err) { }
+                    } catch (err) {
+                      self._recordError('map', err, `key=${String(localKeys[i])}`);
+                    }
                   }
                   cnt++;
                   if (cnt === localKeys.length) {
                     self._mapOut = intermediate;
+                    if (self.strict && self._fatalError) {
+                      callback(self._fatalError);
+                      return;
+                    }
                     callback(null, intermediate);
                   }
                 });
@@ -150,8 +226,15 @@ function mr(config) {
               if (cval !== undefined) {
                 grouped[combineKeys[c]] = [cval];
               }
-            } catch (err) { }
+            } catch (err) {
+              self._recordError('combine', err, `key=${String(combineKeys[c])}`);
+            }
           }
+        }
+
+        if (self.strict && self._fatalError) {
+          callback(self._fatalError);
+          return;
         }
 
         const gKeys = Object.keys(grouped).sort();
@@ -261,9 +344,13 @@ function mr(config) {
             if (e || !localKeys || !Array.isArray(localKeys) ||
               localKeys.length === 0) {
               if (outputGid) {
-                return callback(null, { gid: outputGid, written: 0, reducedKeys: 0 });
+                const emptySummary = { gid: outputGid, written: 0, reducedKeys: 0 };
+                if (self._hasErrors()) {
+                  emptySummary.errors = self._errorSummary;
+                }
+                return callback(self.strict && self._fatalError ? self._fatalError : null, emptySummary);
               }
-              return callback(null, []);
+              return callback(self.strict && self._fatalError ? self._fatalError : null, []);
             }
 
             const results = [];
@@ -274,8 +361,16 @@ function mr(config) {
             function finishOne() {
               cnt++;
               if (cnt === localKeys.length) {
+                if (self.strict && self._fatalError) {
+                  callback(self._fatalError);
+                  return;
+                }
                 if (outputGid) {
-                  callback(null, { gid: outputGid, written, reducedKeys });
+                  const summary = { gid: outputGid, written, reducedKeys };
+                  if (self._hasErrors()) {
+                    summary.errors = self._errorSummary;
+                  }
+                  callback(null, summary);
                 } else {
                   callback(null, results);
                 }
@@ -300,11 +395,13 @@ function mr(config) {
                       try {
                         reduceKey = globalThis.distribution.util.deserialize(key.slice(2));
                       } catch (err) {
+                        self._recordError('reduce', err, `decode-key=${String(key)}`);
                         reduceKey = key;
                       }
                     }
                     reduced = self.reducer(reduceKey, values, self.constants);
                   } catch (err) {
+                    self._recordError('reduce', err, `key=${String(key)}`);
                     finishOne();
                     return;
                   }
@@ -376,19 +473,42 @@ function mr(config) {
       mrService.partitionFn = configuration.partition;
     }
 
-    globalThis.distribution[gid].routes.put(mrService, mrGid, function (e, v) {
+    globalThis.distribution[gid].routes.put(mrService, mrGid, function (e) {
+      if (e) {
+        callback(e);
+        return;
+      }
+
       globalThis.distribution[gid].comm.send(
         [gid, mrGid],
         { service: mrGid, method: 'map' },
-        function (errors, mapValues) {
+        function (mapErrors) {
+          const mapStageError = configuration.strict ? normalizeStageError('map', mapErrors) : null;
+          if (mapStageError) {
+            cleanupAndReturn(mapStageError);
+            return;
+          }
+
           globalThis.distribution[gid].comm.send(
             [gid, mrGid],
             { service: mrGid, method: 'shuffle' },
-            function (errors, shuffleValues) {
+            function (shuffleErrors) {
+              const shuffleStageError = configuration.strict ? normalizeStageError('shuffle', shuffleErrors) : null;
+              if (shuffleStageError) {
+                cleanupAndReturn(shuffleStageError);
+                return;
+              }
+
               globalThis.distribution[gid].comm.send(
                 [gid, mrGid],
                 { service: mrGid, method: 'reduce' },
-                function (errors, reduceValues) {
+                function (reduceErrors, reduceValues) {
+                  const reduceStageError = configuration.strict ? normalizeStageError('reduce', reduceErrors) : null;
+                  if (reduceStageError) {
+                    cleanupAndReturn(reduceStageError);
+                    return;
+                  }
+
                   let finalResult = [];
                   if (configuration.outputGid) {
                     const summary = {
@@ -397,16 +517,50 @@ function mr(config) {
                       reducedKeys: 0,
                       nodes: 0,
                     };
+
+                    const mergedErrors = {
+                      map: { count: 0, samples: [] },
+                      combine: { count: 0, samples: [] },
+                      reduce: { count: 0, samples: [] },
+                    };
+                    let hasNodeErrors = false;
+
                     if (reduceValues) {
                       const nodeIds = Object.keys(reduceValues);
                       summary.nodes = nodeIds.length;
                       for (let i = 0; i < nodeIds.length; i++) {
                         const nodeResult = reduceValues[nodeIds[i]];
-                        if (nodeResult && typeof nodeResult === 'object') {
-                          summary.written += Number(nodeResult.written) || 0;
-                          summary.reducedKeys += Number(nodeResult.reducedKeys) || 0;
+                        if (!nodeResult || typeof nodeResult !== 'object') {
+                          continue;
+                        }
+
+                        summary.written += Number(nodeResult.written) || 0;
+                        summary.reducedKeys += Number(nodeResult.reducedKeys) || 0;
+
+                        if (nodeResult.errors && typeof nodeResult.errors === 'object') {
+                          const stages = ['map', 'combine', 'reduce'];
+                          for (let s = 0; s < stages.length; s++) {
+                            const stage = stages[s];
+                            const stageError = nodeResult.errors[stage];
+                            if (!stageError || typeof stageError !== 'object') {
+                              continue;
+                            }
+                            hasNodeErrors = true;
+                            mergedErrors[stage].count += Number(stageError.count) || 0;
+                            const samples = Array.isArray(stageError.samples) ? stageError.samples : [];
+                            for (let j = 0; j < samples.length; j++) {
+                              if (mergedErrors[stage].samples.length >= 10) {
+                                break;
+                              }
+                              mergedErrors[stage].samples.push(String(samples[j]));
+                            }
+                          }
                         }
                       }
+                    }
+
+                    if (hasNodeErrors) {
+                      summary.errors = mergedErrors;
                     }
                     finalResult = summary;
                   } else if (reduceValues) {
@@ -420,18 +574,14 @@ function mr(config) {
                       }
                     }
                   }
-                  globalThis.distribution[gid].comm.send(
-                    [mrGid],
-                    { service: mrGid, method: 'cleanup' },
-                    function (ce, cv) {
-                      globalThis.distribution[gid].routes.rem(
-                        mrGid, function (e, v) {
-                          callback(null, finalResult);
-                        });
-                    });
-                });
-            });
-        });
+
+                  cleanupAndReturn(null, finalResult);
+                },
+              );
+            },
+          );
+        },
+      );
     });
   }
 
@@ -460,6 +610,10 @@ function mr(config) {
             stored++;
             if (stored === prevResults.length) {
               runOneRound(gid, configuration, function (e, results) {
+                if (e) {
+                  callback(e);
+                  return;
+                }
                 nextRound(results);
               });
             }
@@ -472,6 +626,10 @@ function mr(config) {
               stored++;
               if (stored === prevResults.length) {
                 runOneRound(gid, configuration, function (e, results) {
+                  if (e) {
+                    callback(e);
+                    return;
+                  }
                   nextRound(results);
                 });
               }
@@ -479,6 +637,10 @@ function mr(config) {
         }
       } else {
         runOneRound(gid, configuration, function (e, results) {
+          if (e) {
+            callback(e);
+            return;
+          }
           nextRound(results);
         });
       }

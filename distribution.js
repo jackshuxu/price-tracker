@@ -7,17 +7,16 @@
  * @param {Node} [config]
  */
 function bootstrap(config) {
-  // This loads the reference implementation in case you want to selectively override parts of your implementation with it (e.g., extra credit ypu are not doing or missing functionality from previous milestones).
-  // This needs to run before the rest of the code so that the globalThis.distribution object is populated correctly.
-  // @ts-ignore Optional dependency for reference implementation.
-  // Pass port 0 to library so it auto-selects a random port (avoids EADDRINUSE with our port)
-  const libConfig = Object.assign({}, config || {}, { port: 0 });
   let distributionLib = null;
-  try {
-    distributionLib = require('@brown-ds/distribution')(libConfig);
-    globalThis._distributionLib = distributionLib; // Save for setNodeConfig in child processes
-  } catch (e) {
-    distributionLib = null;
+  if (useLibrary) {
+    // @ts-ignore Optional dependency for reference implementation.
+    const libConfig = Object.assign({}, config || {}, { port: 0 });
+    try {
+      distributionLib = require('@brown-ds/distribution')(libConfig);
+      globalThis._distributionLib = distributionLib;
+    } catch (e) {
+      distributionLib = null;
+    }
   }
 
   const distribution = {};

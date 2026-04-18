@@ -18,6 +18,14 @@ function json(res, statusCode, payload) {
   res.end(body);
 }
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
 function notFound(res) {
   json(res, 404, { error: 'Not found' });
 }
@@ -64,10 +72,10 @@ async function createServer(options) {
       return;
     }
 
-    const base = `http://${req.headers.host || 'localhost'}`;
-    const url = new URL(req.url || '/', base);
-
     try {
+      const base = `http://${req.headers.host || 'localhost'}`;
+      const url = new URL(req.url || '/', base);
+
       if (url.pathname === '/health') {
         json(res, 200, {
           ok: true,
@@ -84,7 +92,7 @@ async function createServer(options) {
       if (url.pathname === '/search') {
         const q = String(url.searchParams.get('q') || '');
         const storeCode = String(url.searchParams.get('storeCode') || '');
-        const limit = Number(url.searchParams.get('limit') || 20);
+        const limit = parsePositiveInt(url.searchParams.get('limit'), 20);
 
         if (!q.trim()) {
           json(res, 200, []);

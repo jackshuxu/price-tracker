@@ -71,6 +71,9 @@ Query params:
 - storeCode: optional store filter
 - limit: optional positive integer, default 20
 
+Limit normalization:
+- non-positive or invalid limit values are normalized to default 20
+
 Response 200 example:
 ```json
 [
@@ -142,6 +145,36 @@ Response 200 example:
 ```json
 { "error": "<message>" }
 ```
+
+## 4.6 Optional Prototype Explain Route (Feature-Flagged)
+
+Route:
+- `GET /api/tj/explain?sku=<sku>&storeCode=<storeCode>`
+
+Purpose:
+- Read-only summary of price movement for one SKU/store.
+- This route is outside M6 scoring critical path.
+
+Feature flag:
+- Disabled by default.
+- Enable with `TJ_API_EXPLAIN_ENABLED=1`.
+
+Response notes:
+- Includes summary fields: latestPrice, delta, deltaPct, minPrice, maxPrice, avgPrice, trend, narrative.
+- Uses `x-tj-data-source` values: `distribution`, `mock`, `none`.
+
+## 4.7 Optional Mounted AI Adapter (Read-Only)
+
+File:
+- `ai/adapter.js`
+
+Purpose:
+- Provide optional search enrichment without changing core ingestion/index/query pipeline.
+- Operate as an independent mounted service that consumes existing APIs via HTTP.
+
+Read-only contract:
+- Adapter consumes only `GET /health`, `GET /search`, `GET /history/{sku}/{storeCode}`, and `GET /stores`.
+- Adapter never writes to distribution storage and never invokes mutation endpoints.
 
 ## 5. Distribution RPC Specification
 
@@ -346,6 +379,9 @@ Important flags:
 - --snapshot-file
 - --no-fallback
 
+Operational output:
+- emits summary counters for fetched stores, fetch failures, fallback stores, and fallback products
+
 ## 9.3 query.js and tj/query.js
 
 Modes:
@@ -375,6 +411,19 @@ The following are intentionally minimal for now:
 - cron.js
 - query.js wrapper
 
+Prototype route status (updated):
+- prototype app/api/tj/search, /history, /stores now use distribution-backed reads as primary path.
+- External TJ/Brandify and mock data are fallback paths only.
+- Fallback behavior can be controlled with env flags:
+  - TJ_API_ALLOW_EXTERNAL_FALLBACK (default enabled)
+  - TJ_API_ALLOW_MOCK_FALLBACK (default enabled)
+- Route responses include x-tj-data-source header with one of:
+  - distribution
+  - external-tj
+  - external-brandify
+  - mock
+  - none
+
 Reason:
 - They are scaffolding for validating MR/indexer/storage behavior and integration flow.
 - They are not yet complete productized services.
@@ -385,7 +434,19 @@ Reason:
 2. Run crawler to fill tjraw/tjstores.
 3. Run indexer and verify _meta:indexer in tjindex.
 4. Validate /search and /history responses from tj/server.js.
-5. Wire prototype routes through distribution-client or tj/server.
+5. Verify prototype /api/tj routes report x-tj-data-source=distribution under healthy cluster conditions.
+6. Run distribution/scripts/stage1-api-smoke.js and distribution/scripts/stage1-smoke.js.
+7. Run distribution/scripts/stage1-pipeline-smoke.js for crawler -> indexer -> server end-to-end.
+8. Run distribution/scripts/stage1-failure-smoke.js for partial-node outage and endpoint error-path coverage.
+9. Run distribution/scripts/stage1-contract-smoke.js for API shape and error-contract checks.
+10. (Optional) Run distribution/scripts/stage1-full-smoke.js for one-command full suite.
+11. (Optional) Run distribution/scripts/stage1-explain-smoke.js for feature-flagged explain route checks.
+12. (Optional) Run distribution/scripts/stage1-full-smoke.js --with-explain to include explain checks in one-command suite.
+13. (Optional) Run distribution/scripts/stage1-adapter-smoke.js for mounted adapter read-only behavior checks.
+14. (Optional) Run distribution/scripts/stage1-full-smoke.js --with-adapter for full suite plus adapter checks.
+15. Run benchmark/scripts/m6_characterize.js and store generated metrics artifact under benchmark/results for T3 evidence.
+16. Run benchmark/scripts/m6_compare_m0.js and store generated comparison artifacts under benchmark/results for T3 M0-vs-M6 analysis evidence.
+17. Run benchmark/scripts/m6_workload_evidence.js and store generated workload-depth artifacts under benchmark/results for T2 evidence.
 
 ## 12. Change Control
 

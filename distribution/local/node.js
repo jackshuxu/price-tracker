@@ -4,7 +4,6 @@
  * @typedef {import("../types.js").Callback} Callback
  */
 const http = require('node:http');
-const url = require('node:url');
 const log = require('../util/log.js');
 
 /**
@@ -136,8 +135,16 @@ function start(callback) {
       The path of the http request will determine the service to be used.
       The url will have the form: http://node_ip:node_port/service/method
     */
-    const tmp = url.parse(req.url, true);
-    const lists = tmp.pathname.split('/');
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    } catch (parseError) {
+      const resp = globalThis.distribution.util.serialize([new Error('Invalid request URL'), null]);
+      res.end(resp);
+      return;
+    }
+
+    const lists = parsedUrl.pathname.split('/');
     const gid = lists[1] || 'local';
     const service = lists[2];
     const method = lists[3];

@@ -22,6 +22,14 @@ function safeString(v) {
   return String(v);
 }
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
 function stemToken(token) {
   let t = token;
   if (t.length > 4 && t.endsWith('ies')) {
@@ -83,7 +91,7 @@ async function searchProducts(distribution, options) {
   }
 
   const storeCode = safeString(options.storeCode).trim();
-  const limit = Math.max(1, Number(options.limit || 20));
+  const limit = parsePositiveInt(options.limit, 20);
   const indexGid = safeString(options.indexGid || 'tjindex');
   const priceGid = safeString(options.priceGid || 'tjprices');
 

@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-04-16T22:28:31.078Z",
+  "configuration": {
+    "host": "127.0.0.1",
+    "coordinatorPort": 12456,
+    "apiPort": 18116,
+    "storeCount": 30,
+    "productsPerStore": 120,
+    "totalProducts": 3600,
+    "snapshotFile": "temp://synthetic-snapshots.json"
+  },
+  "pipeline": {
+    "clearedBeforeRun": {
+      "tjraw": 60,
+      "tjstores": 30,
+      "tjindex": 2590,
+      "tjprices": 3600
+    },
+    "crawlerDurationMs": 1747,
+    "indexerDurationMs": 15872,
+    "crawlerSummary": {
+      "snapshots": 30,
+      "products": 3600,
+      "fromFile": 30,
+      "fetchedStores": 0,
+      "fetchFailures": 0,
+      "fallbackStores": 0,
+      "fallbackProducts": 0
+    },
+    "indexerSummary": {
+      "snapshots": 30,
+      "products": 3600,
+      "docs": 3600
+    }
+  },
+  "observed": {
+    "tjrawKeys": 30,
+    "tjstoresKeys": 30,
+    "tjpricesKeys": 3600,
+    "tjindexKeys": 2590
+  },
+  "apiSamples": {
+    "health": {
+      "status": 200,
+      "elapsedMs": 39.311
+    },
+    "stores": {
+      "status": 200,
+      "elapsedMs": 44.995,
+      "resultCount": 30
+    },
+    "searchEgg": {
+      "status": 200,
+      "elapsedMs": 13.321,
+      "resultCount": 10
+    },
+    "history": {
+      "status": 200,
+      "elapsedMs": 6.069,
+      "resultCount": 1
+    }
+  },
+  "notes": [
+    "Target workload is represented as multi-store synthetic TJ snapshots to provide deterministic crawl depth evidence.",
+    "This artifact complements correctness/performance artifacts by documenting crawl/index corpus scale."
+  ]
+}

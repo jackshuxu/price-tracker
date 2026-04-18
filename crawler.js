@@ -241,12 +241,20 @@ async function main() {
 
     const distribution = runtime.distribution;
     const snapshots = [];
+    const stats = {
+      fromFile: 0,
+      fetchedStores: 0,
+      fetchFailures: 0,
+      fallbackStores: 0,
+      fallbackProducts: 0,
+    };
 
     if (snapshotFile) {
       const loaded = loadSnapshotsFromFile(snapshotFile);
       for (const raw of loaded) {
         snapshots.push(normalizeSnapshot(raw || {}));
       }
+      stats.fromFile = snapshots.length;
       console.log(`[crawler] loaded ${snapshots.length} snapshots from file`);
     } else {
       for (const storeCode of storeCodes) {
@@ -259,8 +267,10 @@ async function main() {
             chain: 'trader_joes',
             products,
           });
+          stats.fetchedStores += 1;
           console.log(`[crawler] fetched ${products.length} products for store ${storeCode}`);
         } catch (error) {
+          stats.fetchFailures += 1;
           if (!allowFallback) {
             throw error;
           }
@@ -271,7 +281,10 @@ async function main() {
             chain: 'trader_joes',
             products: fallback,
           });
-          console.log(`[crawler] fetch failed for ${storeCode}, used fallback products`);
+          stats.fallbackStores += 1;
+          stats.fallbackProducts += fallback.length;
+          const reason = error && error.message ? error.message : String(error);
+          console.warn(`[crawler] fetch failed for ${storeCode}, used fallback products: ${reason}`);
         }
       }
     }
@@ -284,7 +297,12 @@ async function main() {
       console.log(`[crawler] wrote snapshot ${key} (${snapshot.products.length} products)`);
     }
 
-    console.log(`[crawler] done snapshots=${snapshots.length} products=${totalProducts}`);
+    console.log(
+      `[crawler] done snapshots=${snapshots.length} products=${totalProducts} ` +
+      `fromFile=${stats.fromFile} fetchedStores=${stats.fetchedStores} ` +
+      `fetchFailures=${stats.fetchFailures} fallbackStores=${stats.fallbackStores} ` +
+      `fallbackProducts=${stats.fallbackProducts}`,
+    );
   } catch (error) {
     console.error(`[crawler] failed: ${error.message}`);
     process.exitCode = 1;
