@@ -1,0 +1,127 @@
+{
+  "generatedAt": "2026-04-19T23:37:58.448Z",
+  "configuration": {
+    "nodeCounts": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "storeCount": 20,
+    "productsPerStore": 50,
+    "totalDocs": 1000,
+    "mode": "local"
+  },
+  "methodology": {
+    "queryWarmup": 3,
+    "queryIterations": 30,
+    "workerBootMs": 3000,
+    "note": "Crawler and indexer are wall-clock subprocess timings. Query uses sequential HTTP GET after indexing."
+  },
+  "rows": [
+    {
+      "nodes": 1,
+      "storeCount": 20,
+      "totalDocs": 1000,
+      "crawler": {
+        "wallMs": 1603,
+        "throughputSnapshotsPerSec": 12.477
+      },
+      "indexer": {
+        "wallMs": 3754,
+        "throughputDocsPerSec": 266.383
+      },
+      "allComponents": {
+        "wallMs": 5357,
+        "throughputDocsPerSec": 186.672
+      },
+      "search": {
+        "latencyMs": {
+          "p50": 3.379,
+          "p95": 7.389,
+          "p99": 8.943,
+          "avg": 3.864
+        },
+        "throughputRps": 256.41
+      }
+    },
+    {
+      "nodes": 2,
+      "storeCount": 20,
+      "totalDocs": 1000,
+      "crawler": {
+        "wallMs": 1610,
+        "throughputSnapshotsPerSec": 12.422
+      },
+      "indexer": {
+        "wallMs": 4058,
+        "throughputDocsPerSec": 246.427
+      },
+      "allComponents": {
+        "wallMs": 5668,
+        "throughputDocsPerSec": 176.429
+      },
+      "search": {
+        "latencyMs": {
+          "p50": 2.03,
+          "p95": 3.866,
+          "p99": 4.519,
+          "avg": 1.9
+        },
+        "throughputRps": 526.316
+      }
+    },
+    {
+      "nodes": 4,
+      "storeCount": 20,
+      "totalDocs": 1000,
+      "crawler": {
+        "wallMs": 1605,
+        "throughputSnapshotsPerSec": 12.461
+      },
+      "indexer": {
+        "wallMs": 4195,
+        "throughputDocsPerSec": 238.379
+      },
+      "allComponents": {
+        "wallMs": 5800,
+        "throughputDocsPerSec": 172.414
+      },
+      "search": {
+        "latencyMs": {
+          "p50": 0.724,
+          "p95": 2.392,
+          "p99": 3.121,
+          "avg": 1.245
+        },
+        "throughputRps": 789.474
+      }
+    },
+    {
+      "nodes": 8,
+      "storeCount": 20,
+      "totalDocs": 1000,
+      "crawler": {
+        "wallMs": 1612,
+        "throughputSnapshotsPerSec": 12.407
+      },
+      "indexer": {
+        "wallMs": 4499,
+        "throughputDocsPerSec": 222.272
+      },
+      "allComponents": {
+        "wallMs": 6111,
+        "throughputDocsPerSec": 163.639
+      },
+      "search": {
+        "latencyMs": {
+          "p50": 0.8,
+          "p95": 4.142,
+          "p99": 45.513,
+          "avg": 2.957
+        },
+        "throughputRps": 337.079
+      }
+    }
+  ]
+}

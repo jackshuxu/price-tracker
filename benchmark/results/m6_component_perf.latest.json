@@ -1,0 +1,126 @@
+{
+  "generatedAt": "2026-04-19T23:31:28.347Z",
+  "methodology": {
+    "queryWarmup": 5,
+    "queryIterations": 40,
+    "note": "Crawler and indexer measured as wall-clock subprocess duration. Storage measured via sequential distribution.all.store put then get. Search measured via sequential HTTP GET against live query server."
+  },
+  "corpora": [
+    {
+      "corpus": {
+        "id": "corpus1",
+        "label": "Corpus 1 — small",
+        "stores": 10,
+        "productsPerStore": 50,
+        "totalDocs": 500
+      },
+      "storage": {
+        "sampleSize": 100,
+        "put": {
+          "latencyMs": {
+            "p50": 0.431,
+            "p95": 0.686,
+            "p99": 1.553,
+            "avg": 0.491,
+            "min": 0.347,
+            "max": 1.607
+          },
+          "throughputOpsPerSec": 2034.666
+        },
+        "get": {
+          "latencyMs": {
+            "p50": 0.254,
+            "p95": 0.394,
+            "p99": 0.558,
+            "avg": 0.277,
+            "min": 0.202,
+            "max": 0.815
+          },
+          "throughputOpsPerSec": 3609.39
+        }
+      },
+      "crawler": {
+        "wallMs": 1591,
+        "snapshotsIngested": 10,
+        "throughputSnapshotsPerSec": 6.285,
+        "avgLatencyMsPerSnapshot": 159.1
+      },
+      "indexer": {
+        "wallMs": 3150,
+        "docsProcessed": 500,
+        "throughputDocsPerSec": 158.73,
+        "avgLatencyMsPerDoc": 6.3
+      },
+      "search": {
+        "iterations": 40,
+        "latencyMs": {
+          "p50": 2.828,
+          "p95": 4.812,
+          "p99": 5.583,
+          "avg": 3.055,
+          "min": 2.367,
+          "max": 5.583
+        },
+        "throughputRps": 325.203
+      }
+    },
+    {
+      "corpus": {
+        "id": "corpus2",
+        "label": "Corpus 2 — medium",
+        "stores": 50,
+        "productsPerStore": 100,
+        "totalDocs": 5000
+      },
+      "storage": {
+        "sampleSize": 200,
+        "put": {
+          "latencyMs": {
+            "p50": 0.347,
+            "p95": 0.628,
+            "p99": 2.317,
+            "avg": 0.413,
+            "min": 0.273,
+            "max": 2.787
+          },
+          "throughputOpsPerSec": 2421.78
+        },
+        "get": {
+          "latencyMs": {
+            "p50": 0.237,
+            "p95": 0.578,
+            "p99": 9.535,
+            "avg": 0.531,
+            "min": 0.17,
+            "max": 21.577
+          },
+          "throughputOpsPerSec": 1883.907
+        }
+      },
+      "crawler": {
+        "wallMs": 1670,
+        "snapshotsIngested": 50,
+        "throughputSnapshotsPerSec": 29.94,
+        "avgLatencyMsPerSnapshot": 33.4
+      },
+      "indexer": {
+        "wallMs": 10270,
+        "docsProcessed": 5000,
+        "throughputDocsPerSec": 486.855,
+        "avgLatencyMsPerDoc": 2.054
+      },
+      "search": {
+        "iterations": 40,
+        "latencyMs": {
+          "p50": 3.012,
+          "p95": 7.813,
+          "p99": 38.843,
+          "avg": 4.305,
+          "min": 2.232,
+          "max": 38.843
+        },
+        "throughputRps": 231.214
+      }
+    }
+  ]
+}
