@@ -1,0 +1,111 @@
+[
+  {
+    "storeCode": "GOLD01",
+    "capturedAt": "2026-04-10T12:00:00.000Z",
+    "products": [
+      {
+        "sku": "GOLD-ACAI-001",
+        "name": "Organic Acai Berry Smoothie Pack",
+        "price": 8.99,
+        "category": "Frozen",
+        "size": "12 oz"
+      },
+      {
+        "sku": "GOLD-QUINOA-002",
+        "name": "Tri-Color Quinoa Grain Blend",
+        "price": 4.49,
+        "category": "Grains",
+        "size": "16 oz"
+      },
+      {
+        "sku": "GOLD-SRIRACHA-003",
+        "name": "Sriracha Ranch Dressing Sauce",
+        "price": 3.29,
+        "category": "Condiments",
+        "size": "8 fl oz"
+      },
+      {
+        "sku": "GOLD-MATCHA-004",
+        "name": "Japanese Matcha Green Tea Powder",
+        "price": 6.99,
+        "category": "Beverages",
+        "size": "3.5 oz"
+      },
+      {
+        "sku": "GOLD-TRUFFLE-005",
+        "name": "Black Truffle Flatbread Pizza",
+        "price": 5.49,
+        "category": "Frozen",
+        "size": "8.5 oz"
+      }
+    ]
+  },
+  {
+    "storeCode": "GOLD02",
+    "capturedAt": "2026-04-10T12:00:00.000Z",
+    "products": [
+      {
+        "sku": "GOLD-ACAI-001",
+        "name": "Organic Acai Berry Smoothie Pack",
+        "price": 9.29,
+        "category": "Frozen",
+        "size": "12 oz"
+      },
+      {
+        "sku": "GOLD-KIMCHI-006",
+        "name": "Korean Kimchi Fermented Napa Cabbage",
+        "price": 3.99,
+        "category": "Refrigerated",
+        "size": "14 oz"
+      },
+      {
+        "sku": "GOLD-PESTO-007",
+        "name": "Basil Pesto Genovese Sauce",
+        "price": 3.69,
+        "category": "Condiments",
+        "size": "6.7 oz"
+      },
+      {
+        "sku": "GOLD-MOCHI-008",
+        "name": "Sweet Mochi Rice Cake Ice Cream Vanilla",
+        "price": 4.49,
+        "category": "Frozen",
+        "size": "9.1 oz"
+      },
+      {
+        "sku": "GOLD-LAVASH-009",
+        "name": "Whole Wheat Lavash Flatbread",
+        "price": 2.49,
+        "category": "Bakery",
+        "size": "9 oz"
+      }
+    ]
+  },
+  {
+    "storeCode": "GOLD03",
+    "capturedAt": "2026-04-11T12:00:00.000Z",
+    "products": [
+      {
+        "sku": "GOLD-ACAI-001",
+        "name": "Organic Acai Berry Smoothie Pack",
+        "price": 8.49,
+        "category": "Frozen",
+        "size": "12 oz"
+      },
+      {
+        "sku": "GOLD-QUINOA-002",
+        "name": "Tri-Color Quinoa Grain Blend",
+        "price": 4.49,
+        "category": "Grains",
+        "size": "16 oz"
+      },
+      {
+        "sku": "GOLD-MATCHA-004",
+        "name": "Japanese Matcha Green Tea Powder",
+        "price": 7.29,
+        "category": "Beverages",
+        "size": "3.5 oz"
+      }
+    ]
+  }
+]

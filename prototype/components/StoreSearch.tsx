@@ -34,21 +34,26 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
   const [stores, setStores] = useState<Store[]>([])
   const [selectedStore, setSelectedStore] = useState<Store | null>(null)
   const [loadingStores, setLoadingStores] = useState(false)
+  const [storesDataSource, setStoresDataSource] = useState('unknown')
 
   const [query, setQuery] = useState('')
   const [products, setProducts] = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [searched, setSearched] = useState(false)
+  const [searchDataSource, setSearchDataSource] = useState('unknown')
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [history, setHistory] = useState<PricePoint[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [historyDataSource, setHistoryDataSource] = useState('unknown')
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Load stores when state changes
   useEffect(() => {
     if (!selectedState) return
+    let cancelled = false
+
     setStores([])
     setSelectedStore(null)
     setProducts([])
@@ -56,16 +61,52 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
     setHistory([])
     setSearched(false)
     setQuery('')
+    setStoresDataSource('unknown')
+    setSearchDataSource('unknown')
+    setHistoryDataSource('unknown')
     setLoadingStores(true)
 
-    fetch(`/api/tj/stores?state=${selectedState}`)
-      .then(r => r.json())
-      .then((data: Store[]) => {
+    const loadStores = async () => {
+      try {
+        const res = await fetch(`/api/tj/stores?state=${selectedState}`)
+        const source = res.headers.get('x-tj-data-source') ?? 'unknown'
+        const payload: unknown = await res.json()
+
+        if (cancelled) {
+          return
+        }
+
+        setStoresDataSource(source)
+
+        if (!res.ok || !Array.isArray(payload)) {
+          setStores([])
+          return
+        }
+
+        const data = payload as Store[]
         setStores(data)
-        if (data.length > 0) setSelectedStore(data[0])
-      })
-      .catch(console.error)
-      .finally(() => setLoadingStores(false))
+        if (data.length > 0) {
+          setSelectedStore(data[0])
+        }
+      } catch (err) {
+        if (cancelled) {
+          return
+        }
+        console.error(err)
+        setStoresDataSource('error')
+        setStores([])
+      } finally {
+        if (!cancelled) {
+          setLoadingStores(false)
+        }
+      }
+    }
+
+    loadStores()
+
+    return () => {
+      cancelled = true
+    }
   }, [selectedState])
 
   // Focus search when store selected
@@ -81,15 +122,26 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
     setSearched(true)
     setSelectedProduct(null)
     setHistory([])
+    setSearchDataSource('unknown')
 
     try {
       const res = await fetch(
         `/api/tj/search?q=${encodeURIComponent(query)}&storeCode=${selectedStore.storeCode}`
       )
-      const data: Product[] = await res.json()
+      const source = res.headers.get('x-tj-data-source') ?? 'unknown'
+      const payload: unknown = await res.json()
+
+      if (!res.ok) {
+        throw new Error(typeof payload === 'object' ? JSON.stringify(payload) : String(payload))
+      }
+
+      const data = Array.isArray(payload) ? (payload as Product[]) : []
+      setSearchDataSource(source)
       setProducts(data)
     } catch (err) {
       console.error(err)
+      setSearchDataSource('error')
+      setProducts([])
     } finally {
       setLoadingProducts(false)
     }
@@ -99,15 +151,26 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
     setSelectedProduct(product)
     setLoadingHistory(true)
     setHistory([])
+    setHistoryDataSource('unknown')
 
     try {
       const res = await fetch(
         `/api/tj/history/${product.sku}/${selectedStore?.storeCode ?? '000'}`
       )
-      const data: PricePoint[] = await res.json()
+      const source = res.headers.get('x-tj-data-source') ?? 'unknown'
+      const payload: unknown = await res.json()
+
+      if (!res.ok) {
+        throw new Error(typeof payload === 'object' ? JSON.stringify(payload) : String(payload))
+      }
+
+      const data = Array.isArray(payload) ? (payload as PricePoint[]) : []
+      setHistoryDataSource(source)
       setHistory(data)
     } catch (err) {
       console.error(err)
+      setHistoryDataSource('error')
+      setHistory([])
     } finally {
       setLoadingHistory(false)
     }
@@ -219,6 +282,10 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
         </p>
       )}
 
+      {storesDataSource !== 'unknown' && (
+        <DataSourceBadge scope="stores" source={storesDataSource} />
+      )}
+
       {/* Search bar */}
       {selectedStore && (
         <div style={{ display: 'flex', gap: '0', border: '1px solid var(--cream-darker)' }}>
@@ -264,6 +331,10 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
 
       {/* Results */}
       {loadingProducts && <LoadingPulse text="Searching products..." />}
+
+      {searched && searchDataSource !== 'unknown' && (
+        <DataSourceBadge scope="search" source={searchDataSource} />
+      )}
 
       <AnimatePresence>
         {!loadingProducts && searched && products.length === 0 && (
@@ -387,6 +458,10 @@ export default function StoreSearch({ selectedState }: StoreSearchProps) {
               Price history · SKU {selectedProduct.sku}
             </p>
 
+            {historyDataSource !== 'unknown' && (
+              <DataSourceBadge scope="history" source={historyDataSource} />
+            )}
+
             {loadingHistory ? (
               <LoadingPulse text="Loading history..." />
             ) : history.length <= 1 ? (
@@ -442,6 +517,24 @@ function LoadingPulse({ text }: { text: string }) {
       }}
     >
       {text}
+    </p>
+  )
+}
+
+function DataSourceBadge({ scope, source }: { scope: string; source: string }) {
+  const isError = source === 'error' || source === 'none'
+  return (
+    <p
+      style={{
+        fontFamily: 'var(--font-mono), monospace',
+        fontSize: '0.58rem',
+        color: isError ? 'var(--tomato)' : 'var(--ink-muted)',
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        marginTop: '-0.2rem',
+      }}
+    >
+      {scope} source: {source}
     </p>
   )
 }

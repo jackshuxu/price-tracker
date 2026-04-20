@@ -1,0 +1,90 @@
+{
+  "generatedAt": "2026-04-16T22:10:57.433Z",
+  "environment": {
+    "host": "127.0.0.1",
+    "apiPort": 18086,
+    "coordinatorPort": 12438
+  },
+  "methodology": {
+    "warmup": 3,
+    "iterations": 30,
+    "note": "Seeded synthetic dataset for repeatable stage-1 latency/throughput characterization."
+  },
+  "endpoints": {
+    "health": {
+      "iterations": 30,
+      "statuses": {
+        "200": 30
+      },
+      "latencyMs": {
+        "p50": 0.421,
+        "p95": 1.053,
+        "p99": 1.218,
+        "max": 1.218,
+        "min": 0.319,
+        "avg": 0.516
+      },
+      "throughputRps": 1875
+    },
+    "searchEgg": {
+      "iterations": 30,
+      "statuses": {
+        "200": 30
+      },
+      "latencyMs": {
+        "p50": 2.057,
+        "p95": 3.772,
+        "p99": 4.277,
+        "max": 4.277,
+        "min": 1.781,
+        "avg": 2.257
+      },
+      "throughputRps": 441.176
+    },
+    "searchBanana": {
+      "iterations": 30,
+      "statuses": {
+        "200": 30
+      },
+      "latencyMs": {
+        "p50": 1.723,
+        "p95": 2.776,
+        "p99": 3.24,
+        "max": 3.24,
+        "min": 1.296,
+        "avg": 1.829
+      },
+      "throughputRps": 545.455
+    },
+    "historyEgg": {
+      "iterations": 30,
+      "statuses": {
+        "200": 30
+      },
+      "latencyMs": {
+        "p50": 1.079,
+        "p95": 1.779,
+        "p99": 1.955,
+        "max": 1.955,
+        "min": 0.757,
+        "avg": 1.162
+      },
+      "throughputRps": 857.143
+    },
+    "stores": {
+      "iterations": 30,
+      "statuses": {
+        "200": 30
+      },
+      "latencyMs": {
+        "p50": 1.579,
+        "p95": 2.344,
+        "p99": 2.588,
+        "max": 2.588,
+        "min": 1.254,
+        "avg": 1.657
+      },
+      "throughputRps": 600
+    }
+  }
+}

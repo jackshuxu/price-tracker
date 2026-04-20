@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { fetchTJStores } from '@/lib/tj'
 import { STATE_ZIPS } from '@/lib/state-zips'
+import { listStoresFromDistribution } from '@/lib/tj-distribution'
+
+const ALLOW_EXTERNAL_FALLBACK = process.env.TJ_API_ALLOW_EXTERNAL_FALLBACK !== '0'
+const ALLOW_MOCK_FALLBACK = process.env.TJ_API_ALLOW_MOCK_FALLBACK !== '0'
 
 // Fallback mock stores keyed by state abbreviation
 const MOCK_STORES: Record<string, { storeCode: string; name: string; city: string; state: string; address: string; zip: string }[]> = {
@@ -53,12 +57,36 @@ export async function GET(req: Request) {
   const zip = STATE_ZIPS[state].zip
 
   try {
-    const stores = await fetchTJStores(zip)
-    // Filter to state match if we got results
-    const filtered = stores.filter(s => s.state === state || stores.length < 3)
-    return NextResponse.json(filtered.length > 0 ? filtered : getMockStores(state))
+    const distributedStores = await listStoresFromDistribution(state)
+    if (distributedStores.length > 0) {
+      return NextResponse.json(distributedStores, { headers: { 'x-tj-data-source': 'distribution' } })
+    }
+
+    if (ALLOW_EXTERNAL_FALLBACK) {
+      const stores = await fetchTJStores(zip)
+      // Filter to state match if we got results
+      const filtered = stores.filter(s => s.state === state || stores.length < 3)
+      if (filtered.length > 0) {
+        return NextResponse.json(filtered, { headers: { 'x-tj-data-source': 'external-brandify' } })
+      }
+    }
+
+    if (ALLOW_MOCK_FALLBACK) {
+      return NextResponse.json(getMockStores(state), { headers: { 'x-tj-data-source': 'mock' } })
+    }
+
+    return NextResponse.json(
+      { error: 'Stores backend unavailable and fallback disabled' },
+      { status: 503, headers: { 'x-tj-data-source': 'none' } },
+    )
   } catch (err) {
-    console.warn('Brandify unavailable, using mock:', err)
-    return NextResponse.json(getMockStores(state))
+    console.warn('Distribution/Brandify stores unavailable:', err)
+    if (ALLOW_MOCK_FALLBACK) {
+      return NextResponse.json(getMockStores(state), { headers: { 'x-tj-data-source': 'mock' } })
+    }
+    return NextResponse.json(
+      { error: 'Stores backend unavailable and fallback disabled' },
+      { status: 503, headers: { 'x-tj-data-source': 'none' } },
+    )
   }
 }

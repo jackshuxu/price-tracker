@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GOLDEN_PAGES="$(cd "$SCRIPT_DIR/../golden/pages" && pwd)"
-ND="$(cd "$SCRIPT_DIR/../../../non-distribution" && pwd)"
+ND="$(cd "$SCRIPT_DIR/../../non-distribution" && pwd)"
 
 SEED_URL="file://${GOLDEN_PAGES}/tj/index.html"
 URL_TJ="file://${GOLDEN_PAGES}/tj/index.html"

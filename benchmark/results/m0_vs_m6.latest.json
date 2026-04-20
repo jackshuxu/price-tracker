@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-04-16T22:21:21.453Z",
+  "m0": {
+    "source": "non-distribution/package.json",
+    "hours": 15,
+    "dloc": 5000,
+    "jsloc": 143,
+    "sloc": 342,
+    "throughput": {
+      "crawlerRps": 1.0084,
+      "indexerRps": 1.0084,
+      "queryRps": 3.5067
+    }
+  },
+  "m6": {
+    "source": "benchmark/results/m6_characterization.latest.json",
+    "generatedAt": "2026-04-16T22:10:57.433Z",
+    "queryReference": {
+      "name": "searchEgg",
+      "throughputRps": 441.176,
+      "p95LatencyMs": 3.772
+    },
+    "endpointSnapshot": [
+      {
+        "name": "health",
+        "throughputRps": 1875,
+        "p95LatencyMs": 1.053
+      },
+      {
+        "name": "searchEgg",
+        "throughputRps": 441.176,
+        "p95LatencyMs": 3.772
+      },
+      {
+        "name": "searchBanana",
+        "throughputRps": 545.455,
+        "p95LatencyMs": 2.776
+      },
+      {
+        "name": "historyEgg",
+        "throughputRps": 857.143,
+        "p95LatencyMs": 1.779
+      },
+      {
+        "name": "stores",
+        "throughputRps": 600,
+        "p95LatencyMs": 2.344
+      }
+    ]
+  },
+  "comparison": {
+    "speedupX": 125.809,
+    "deltaPct": 12480.95
+  },
+  "notes": [
+    "M0 baseline is from non-distribution/package.json milestone report metadata.",
+    "M6 numbers are from benchmark/results/m6_characterization.latest.json.",
+    "Interpret speedup as directional because workload semantics differ between M0 and M6."
+  ]
+}
