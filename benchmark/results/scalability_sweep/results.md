@@ -1,17 +1,16 @@
 # M6 Scalability Sweep Results
 
-Generated: 2026-04-19T23:37:58.448Z
+Generated: 2026-04-20T00:05:01.412Z
 
-Corpus: 20 stores × 50 products = **1000 docs** per run
+Corpus: 100 stores × 50 products = **5000 docs** per run
 
 ## Throughput vs Nodes
 
 | Nodes | Crawler (snapshots/sec) | Indexer (docs/sec) | All Components (docs/sec) | Query p95 (ms) | Query (rps) |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 12.477 | 266.383 | 186.672 | 7.389 | 256.41 |
-| 2 | 12.422 | 246.427 | 176.429 | 3.866 | 526.316 |
-| 4 | 12.461 | 238.379 | 172.414 | 2.392 | 789.474 |
-| 8 | 12.407 | 222.272 | 163.639 | 4.142 | 337.079 |
+| 1 | 47.483 | 254.907 | 230.192 | 41.753 | 51.37 |
+| 2 | 45.228 | 239.854 | 216.854 | 15.322 | 80 |
+| 3 | 47.619 | 249.775 | 226.06 | 18.775 | 80.429 |
 
 ## Notes
 
