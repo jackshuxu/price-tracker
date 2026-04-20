@@ -91,24 +91,41 @@ def fig_scalability():
     if not rows:
         return
 
-    nodes       = [r["nodes"]                               for r in rows]
-    crawler_k   = [r["crawler"]["throughputSnapshotsPerSec"] / 1000 for r in rows]
-    indexer_k   = [r["indexer"]["throughputDocsPerSec"]     / 1000  for r in rows]
-    all_k       = [r["allComponents"]["throughputDocsPerSec"]/ 1000 for r in rows]
+    nodes       = [r["nodes"]                                 for r in rows]
+    crawler_raw = [r["crawler"]["throughputSnapshotsPerSec"]  for r in rows]
+    indexer_raw = [r["indexer"]["throughputDocsPerSec"]       for r in rows]
+    all_raw     = [r["allComponents"]["throughputDocsPerSec"] for r in rows]
+
+    # Auto-scale: K units only when values exceed 500
+    max_val = max(crawler_raw + indexer_raw + all_raw)
+    if max_val >= 500:
+        scale, ylabel, fmt = 1000, "Throughput (K docs / sec)", "%.1f"
+    else:
+        scale, ylabel, fmt = 1, "Throughput (docs / sec)", "%.0f"
+
+    crawler_y = [v / scale for v in crawler_raw]
+    indexer_y = [v / scale for v in indexer_raw]
+    all_y     = [v / scale for v in all_raw]
 
     fig, ax = plt.subplots(figsize=(6, 3.2))
 
-    mk = dict(markersize=6, linewidth=1.5)
-    ax.plot(nodes, crawler_k, color=BLUE,   marker="^",  label="Crawler",        **mk)
-    ax.plot(nodes, indexer_k, color=BLUE,   marker="^",  label="Indexer",
-            linestyle="--", alpha=0.7,       **mk)
-    ax.plot(nodes, all_k,     color=ORANGE, marker="^",  label="All components", **mk)
+    mk = dict(markersize=7, linewidth=1.8)
+    ax.plot(nodes, crawler_y, color=BLUE,   marker="^", label="Crawler",        **mk)
+    ax.plot(nodes, indexer_y, color=BLUE,   marker="^", label="Indexer",
+            linestyle="--", alpha=0.75, **mk)
+    ax.plot(nodes, all_y,     color=ORANGE, marker="^", label="All components", **mk)
+
+    for series in (crawler_y, indexer_y, all_y):
+        for x, y in zip(nodes, series):
+            ax.annotate(f"{y:.1f}", (x, y), textcoords="offset points",
+                        xytext=(0, 6), ha="center", fontsize=7)
 
     ax.set_xlabel("Number of nodes")
-    ax.set_ylabel("Throughput (K docs / sec)")
+    ax.set_ylabel(ylabel)
     ax.set_xticks(nodes)
+    ax.set_ylim(bottom=0)
     ax.legend(frameon=False, loc="upper left")
-    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.0f"))
+    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter(fmt))
 
     fig.tight_layout()
     save(fig, "fig1_scalability.pdf")
@@ -237,19 +254,29 @@ def fig_component_throughput():
     x = np.arange(len(components))
     width = 0.35
 
-    fig, ax = plt.subplots(figsize=(8, 3.8))
+    fig, ax = plt.subplots(figsize=(8, 4.2))
 
-    ax.bar(x - width/2, c1_vals, width, label=c1["corpus"]["label"],
-           color=CORPUS1_COLOR, alpha=0.9)
-    ax.bar(x + width/2, c2_vals, width, label=c2["corpus"]["label"],
-           color=CORPUS2_COLOR, alpha=0.9)
+    b1 = ax.bar(x - width/2, c1_vals, width, label=c1["corpus"]["label"],
+                color=CORPUS1_COLOR, alpha=0.9)
+    b2 = ax.bar(x + width/2, c2_vals, width, label=c2["corpus"]["label"],
+                color=CORPUS2_COLOR, alpha=0.9)
+
+    # Annotate each bar with its value
+    for rect, val in zip(b1, c1_vals):
+        label = f"{val:.0f}" if val >= 10 else f"{val:.1f}"
+        ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 20,
+                label, ha="center", va="bottom", fontsize=7, color="black")
+    for rect, val in zip(b2, c2_vals):
+        label = f"{val:.0f}" if val >= 10 else f"{val:.1f}"
+        ax.text(rect.get_x() + rect.get_width() / 2, rect.get_height() + 20,
+                label, ha="center", va="bottom", fontsize=7, color="black")
 
     ax.set_ylabel("Throughput")
     ax.set_xlabel("System Components")
     ax.set_xticks(x)
     ax.set_xticklabels(components, fontsize=8)
     ax.legend(frameon=False)
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=max(c1_vals + c2_vals) * 1.18)
 
     fig.tight_layout()
     save(fig, "fig3_component_throughput.pdf")
